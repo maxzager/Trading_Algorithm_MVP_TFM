@@ -1,5 +1,5 @@
 import pandas as pd
-
+import numpy as np
 
 def read_datacsv(file_name, nrows=None, skip_inirows=None):
     """
@@ -67,3 +67,86 @@ def generate_volumebars(data, volume_threshold):
     volume_bars = volume_bars.drop(['datetime'], axis=1)  
     
     return volume_bars   
+
+def calculate_atr(data, period):
+    """
+    Calculate the Average True Range (ATR)
+
+    Args:
+        data (pd.DataFrame): DataFrame with 'high', 'low', and 'close' columns
+        period (int): The period over which to calculate the ATR
+
+    Returns:
+        pd.Series: A pandas Series containing the ATR
+    """
+    high_low = data['high'] - data['low']
+    high_close = (data['high'] - data['close'].shift()).abs()
+    low_close = (data['low'] - data['close'].shift()).abs()
+
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = ranges.max(axis=1)
+    atr = true_range.rolling(period).mean()
+
+    return atr
+
+def labelling(data, length=None, dynamic=True, period=None, beta=None, height=None):
+    """
+    This function labels the data based on the given parameters.
+
+    Args:
+        data (pd.DataFrame): DataFrame with 'high', 'low', and 'close' columns
+        length (int): The length of the barriers
+        dynamic (bool): If True, the labelling is dynamic using ATR
+        period (int): The period over which to calculate the ATR
+        beta (float): Multiplier of ATR for calculating the upper and lower barriers
+        height (float): The height for calculating the upper and lower bands when dynamic is False
+
+    Returns:
+        pd.DataFrame: A DataFrame with the labelled data
+    """
+    datacopy = data.copy()
+    atr = calculate_atr(datacopy, period)
+    output = list()
+
+    if dynamic:
+        
+        # average true range
+    
+        for i in range(len(datacopy)-length):
+
+            series = datacopy[i:i+length]
+            uper_barrier = series.high.iloc[0] + beta*atr.iloc[i]
+            lower_barrier = series.low.iloc[0] - beta*atr.iloc[i]
+            pre_labels =  np.where(series.high >= uper_barrier, 1,
+                           (np.where(series.low <= lower_barrier, -1, 0)))
+        
+        # Si hay alguna etiqueta distinta de 0,
+        # quiero la primera en suceder.
+            if any(pre_labels != 0):
+                output.append(pre_labels[pre_labels != 0][0])
+            else:
+                output.append(0)
+        datacopy.drop(datacopy.index[-length:],axis=0, inplace=True) # Pierdo los ultimos "length" datos
+        datacopy["labels"] = np.array(output)    
+
+        return datacopy
+    
+    else:
+        for i in range(len(datacopy)-length):
+
+            series = datacopy[i:i+length]
+            upper_band = series.close.iloc[0]*(1+height/100) 
+            lower_band = series.close.iloc[0]*(1-height/100)
+            pre_labels =  np.where(series.high >= upper_band, 1,
+                           (np.where(series.low <= lower_band, -1, 0)))
+
+            if any(pre_labels != 0):
+                output.append(pre_labels[pre_labels != 0][0])
+            else:
+                output.append(0)
+            
+        datacopy.drop(datacopy.index[-length:],axis=0, inplace=True) # Pierdo los ultimos "length" datos
+        datacopy["labels"] = np.array(output)
+    
+        return datacopy
+    
