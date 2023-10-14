@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-def read_datacsv(file_name, nrows=None, skip_inirows=None):
+def read_datacsv(file_name, nrows=None, skip_inirows=None, tick_data=False):
     """
     Esta funcion permite lleer un archivo .csv desde el directorio de trabajo actual.
     Trabaja sobre los datos y los entrega en formato de DataFrame de Pandas.
@@ -13,15 +13,23 @@ def read_datacsv(file_name, nrows=None, skip_inirows=None):
         df: DataFrame con los datos leidos del csv
     """
     # Carga datos desde csv
-    df = pd.read_csv(file_name, 
-                       nrows=nrows,                             
-                       skiprows=skip_inirows, 
-                       header=0, 
-                       names=['date', 'time', 'open', 'high', 'low', 'close', 'volume'], 
-                       index_col=False) 
+    if tick_data is True:
+        df = pd.read_csv(file_name,
+                         nrows=nrows,
+                         skiprows=skip_inirows,
+                         header=0,
+                         names=['date', 'time', 'price', 'volume'],
+                         index_col=False)
+    else:
+        df = pd.read_csv(file_name, 
+                        nrows=nrows,                             
+                        skiprows=skip_inirows, 
+                        header=0, 
+                        names=['date', 'time', 'open', 'high', 'low', 'close', 'volume'], 
+                        index_col=False) 
     
-    # Agregar zeros para el tiempo    
-    df['time'] = df['time'].astype(str).str.zfill(4)
+        # Agregar zeros para el tiempo    
+        df['time'] = df['time'].astype(str).str.zfill(4)
 
     # Formato datetime
     df['datetime'] = pd.to_datetime(df['date'] + ' ' + df['time']) 
@@ -38,7 +46,7 @@ def read_datacsv(file_name, nrows=None, skip_inirows=None):
     return df
 
 # Funcion Calculo Volume Bars
-def generate_volumebars(data, volume_threshold):
+def generate_volumebars(data, volume_threshold, tick_data=False):
     """
     Genera un DataFrame con volume_bars, high es el maximo, low el minimo, close el ultimo.
     Inputs:
@@ -54,13 +62,25 @@ def generate_volumebars(data, volume_threshold):
     df['volume_bin'] = (df['cumulative_volume'] // volume_threshold).astype(int)
     df['datetime'] = df.index
 
-    volume_bars = df.groupby('volume_bin').agg(
-        datetime=('datetime', 'first'),
-        high=('high', 'max'),
-        low=('low', 'min'),
-        close=('close', 'last'),
-        volume=('volume', 'sum')
-    ).reset_index(drop=True)  
+    if tick_data is True:
+        volume_bars = df.groupby('volume_bin').agg(
+            datetime=('datetime', 'first'),
+            open=('price', 'first'),
+            high=('price', 'max'),
+            low=('price', 'min'),
+            close=('price', 'last'),
+            volume=('volume', 'sum')
+
+        ).reset_index(drop=True)
+    else:
+
+        volume_bars = df.groupby('volume_bin').agg(
+            datetime=('datetime', 'first'),
+            high=('high', 'max'),
+            low=('low', 'min'),
+            close=('close', 'last'),
+            volume=('volume', 'sum')
+        ).reset_index(drop=True)  
 
     volume_bars.index = volume_bars['datetime']
     
@@ -91,15 +111,16 @@ def calculate_atr(data, period):
 
 class labeler:
 
-    def __init__(self, data:pd.DataFrame, vol_thresholds:list, horizons:list, betas:list, periods:list):
+    def __init__(self, data:pd.DataFrame, tick_data:bool, vol_thresholds:list, horizons:list, betas:list, periods:list):
         self.data = data
+        self.tick_data = tick_data
         self.vol_thresholds = vol_thresholds
         self.horizons = horizons
         self.betas = betas
         self.periods = periods
 
     def labelling_ATR(self, df, horizon, beta, period):
-        atr = calculate_atr(self.data, period)
+        atr = calculate_atr(df, period)
         uper_barrier = df.high + beta*atr
         lower_barrier = df.low - beta*atr
 
@@ -153,7 +174,7 @@ class labeler:
     def run_labeler(self):
         output = dict()
         for i in self.vol_thresholds:
-            df = generate_volumebars(self.data, i)
+            df = generate_volumebars(self.data, i, self.tick_data)
 
             ### ACA HAY QUE LLAMAR FUNCION QUE AGREGA LOS FEATURES
 
