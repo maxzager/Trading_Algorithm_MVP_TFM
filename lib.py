@@ -4,6 +4,7 @@ import pandas_ta as ta
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, History
 import matplotlib.pyplot as plt
+import os
 
 class DataHandler:
 	def __init__(self, file_name, nrows=None, skip_inirows=None, tick_data=False):
@@ -535,7 +536,7 @@ class ModelsHandler:
 							epochs=epochs, 
 							batch_size=batch_size,
 							callbacks=[checkpoint, early_stopping, history_callback],
-							verbose=1)
+							verbose=0)
 	
 	def plot_learning_curves(self):
 		# Plot for loss
@@ -570,4 +571,24 @@ class ModelsHandler:
 		plt.tight_layout()
 		plt.savefig(f'model_learning_curves/{self.model_name}_{self.label_option}_plots.jpg')
 		plt.close()
+
+	def store_metrics(self, bar_size, model_name, model_type, label_option):
+
+		# Initialize CSV file with headers if it doesn't exist
+		csv_metrics = 'model_metrics/metrics.csv'
+
+		# Create headers if the file doesn't exist
+		if not os.path.exists(csv_metrics):
+			with open(csv_metrics, 'w') as file:
+				header = "bar_size,model_name,model_type,label_option," + ",".join(self.history.history.keys()) + "\n"
+				file.write(header)
+
+		# Extract the metrics of the best epoch based on validation accuracy
+		best_epoch_index = np.argmax(self.history.history['val_accuracy'])
+		best_metrics = {metric: values[best_epoch_index] for metric, values in self.history.history.items()}
+
+		# Append the metrics to the CSV
+		with open(csv_metrics, 'a') as file:
+			row = f"{bar_size},{model_name},{model_type},{label_option}," + ",".join([str(best_metrics[metric]) for metric in self.history.history.keys()]) + "\n"
+			file.write(row)
 
